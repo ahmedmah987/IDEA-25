@@ -1,0 +1,42 @@
+# IDEA-25 — default simulation configuration
+# Every value here can be overridden with CLI flags on scripts/run_simulation.py
+
+data:
+  # Public, key-less Binance market-data mirror. Works from anywhere Binance's
+  # main API blocks (see README > "Why data-api.binance.vision"). No API key needed.
+  base_url: "https://data-api.binance.vision"
+  interval: "1h"          # kline interval: 1m,5m,15m,1h,4h,1d ...
+  lookback_days: 365       # how much history to pull per symbol
+  cache_dir: "data/raw"
+
+universe:
+  quote_asset: "USDT"
+  # "all" = every TRADING spot pair quoted in USDT (hundreds of symbols).
+  # For a first run, prefer a short explicit list — it's dramatically faster
+  # and enough to validate strategies before scaling up.
+  symbols: ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT"]
+
+backtest:
+  initial_capital: 1000.0
+  taker_fee: 0.001          # Binance spot default taker fee (0.1%)
+  slippage: 0.0005           # assumed 0.05% slippage per fill
+
+optimizer:
+  # Search strategy: "grid" enumerates every combination (exhaustive but can
+  # explode combinatorially), "random" samples N combinations uniformly from
+  # the same space — this is the practical way to cover a near-infinite
+  # parameter space in finite time.
+  method: "random"
+  n_random_samples: 500     # per strategy, per symbol
+  n_jobs: 4                  # parallel worker processes
+  rank_metric: "score"       # see backtest/metrics.py: score()
+  top_n: 25                  # how many results to keep in the leaderboard
+
+strategies:
+  - trend_ma_cross
+  - trend_macd
+  - mean_reversion_rsi
+  - mean_reversion_bollinger
+  - grid_trading
+  - dca_dip_buyer
+  - breakout_donchian

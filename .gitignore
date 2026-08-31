@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# Data & reports (regenerated locally, can be large)
+data/raw/*.parquet
+data/raw/*.csv
+reports/*.csv
+reports/*.json
+reports/*.png
+!data/raw/.gitkeep
+!reports/.gitkeep
+
+# Secrets (Phase 3 - live bot API keys)
+.env
+*.key
+
+# OS
+.DS_Store
