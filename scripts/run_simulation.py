@@ -43,6 +43,7 @@ def parse_args():
     p.add_argument("--strategies", default=None, help="Comma-separated strategy names. Overrides config.")
     p.add_argument("--method", choices=["grid", "random"], default=None)
     p.add_argument("--n-random-samples", type=int, default=None)
+    p.add_argument("--initial-capital", type=float, default=None)
     p.add_argument("--n-jobs", type=int, default=None)
     p.add_argument("--top-n", type=int, default=None)
     p.add_argument("--out", default="reports/leaderboard.csv")
@@ -95,7 +96,7 @@ def main():
         symbols=list(data_by_symbol.keys()),
         strategy_names=strategy_names,
         interval=interval,
-        initial_capital=cfg["backtest"]["initial_capital"],
+        initial_capital=args.initial_capital or cfg["backtest"]["initial_capital"],
         taker_fee=cfg["backtest"]["taker_fee"],
         slippage=cfg["backtest"]["slippage"],
         method=args.method or cfg["optimizer"]["method"],
