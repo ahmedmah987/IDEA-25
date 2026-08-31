@@ -25,6 +25,7 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from backtest.metrics import PLAUSIBLE_CAGR_CAP  # noqa: E402
 from data.fetch_binance_data import get_usdt_pairs, load_or_fetch  # noqa: E402
 from optimizer.runner import SweepConfig, run_sweep  # noqa: E402
 
@@ -124,10 +125,22 @@ def main():
     leaderboard.to_csv(args.out, index=False)
     print(f"Full leaderboard saved to {args.out}\n")
 
+    n_implausible = int((~leaderboard["plausible"]).sum()) if "plausible" in leaderboard else 0
+    plausible_board = leaderboard[leaderboard["plausible"]] if "plausible" in leaderboard else leaderboard
+
     print(f"Top {top_n} (ranked by score — see backtest/metrics.py:score for how it's computed):")
     cols = ["symbol", "strategy", "score", "cagr", "sharpe", "max_drawdown", "win_rate", "n_trades", "params"]
     with pd.option_context("display.max_colwidth", 60, "display.width", 160):
-        print(leaderboard[cols].head(top_n).to_string(index=False))
+        print(plausible_board[cols].head(top_n).to_string(index=False))
+
+    if n_implausible:
+        print(
+            f"\n⚠ {n_implausible} combination(s) were excluded from the table above: CAGR over "
+            f"{PLAUSIBLE_CAGR_CAP:.0%}/year, which past a certain point is a backtest-compounding "
+            "artifact (idealized fills, no slippage on partial rebalances), not a real edge -- see "
+            "README > 'Known limitation: grid trading'. They're still in the saved CSV, flagged "
+            "plausible=False, for inspection."
+        )
 
     print(
         "\nReminder: these are historical-data results, not a promise of future profit. "

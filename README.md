@@ -76,6 +76,30 @@ accumulated buys), so those two run an explicit bar-by-bar loop over numpy
 arrays internally — still fast (tens of thousands of bars in well under a
 second) — while still exposing the same `generate_positions()` contract.
 
+### Known limitation: grid trading (and high-frequency rebalancing in general)
+
+A strategy that changes its position fraction very often, in small slices,
+compounded across a full year of hourly bars (8,760 independent compounding
+periods), can show an absurd backtested CAGR from a genuinely tiny per-bar
+edge — e.g. a modest +0.05%/bar edge alone compounds to roughly 7,900%/year
+purely from compounding frequency. This backtester fills every position
+change at the candle's close price with a flat fee+slippage cost; it has no
+model for order-book depth, partial fills, or the latency a real
+high-frequency grid bot would fight. Grid trading is the strategy family
+most exposed to this (see `strategies/grid_dca.py`'s docstring for the
+concrete bug this project hit and fixed: an earlier version repriced its
+entire grid from the *rolling* high/low every bar instead of a periodically
+static one, letting it capture every price wiggle with perfect timing).
+
+Guardrails now in place because of that: `backtest/metrics.py` flags any
+result with CAGR over `PLAUSIBLE_CAGR_CAP` (5,000%/year — already a very
+generous line) as `plausible=False`, excludes it from the score used to
+rank the leaderboard, and `scripts/run_simulation.py` drops it from the
+printed Top-N table (it's still in the saved CSV, flagged, for inspection).
+Treat this as a coarse trip-wire, not proof the strategies that pass it are
+real — walk-forward validation is still required, and grid trading
+candidates specifically deserve extra skepticism even when they pass.
+
 ### Strategies included
 
 | Name | Family | Idea |

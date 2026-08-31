@@ -46,7 +46,7 @@ def _run_one(symbol: str, strategy_name: str, params: dict, df: pd.DataFrame, cf
         metrics = {
             "total_return": float("nan"), "cagr": float("nan"), "max_drawdown": float("nan"),
             "sharpe": float("nan"), "win_rate": float("nan"), "profit_factor": float("nan"),
-            "n_trades": 0, "score": -999.0, "error": str(exc),
+            "n_trades": 0, "n_bars": 0, "plausible": False, "score": -999.0, "error": str(exc),
         }
     return {"symbol": symbol, "strategy": strategy_name, "params": params, **metrics}
 

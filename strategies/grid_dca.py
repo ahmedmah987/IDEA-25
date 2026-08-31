@@ -18,44 +18,64 @@ from strategies.base import Strategy, clip_position
 
 
 class GridTradingStrategy(Strategy):
-    """Divide a rolling price range into `n_levels` grid lines. Each time
-    price crosses a level downward, buy one grid-sized slice; each time it
-    crosses a level upward while holding that slice, sell it. Net effect:
-    position scales up as price falls through the range and back down as it
-    recovers — classic grid/"buy low sell high in a channel" behavior.
+    """A static ladder of `n_levels` price lines spanning the trailing
+    `range_window`-bar high/low, recomputed periodically (every
+    range_window // 4 bars) rather than every single bar. Each level is
+    bought (once) the first time price dips to or below it, and sold (once)
+    only after price recovers a full grid step above it — position scales
+    up as price falls through the ladder, back down as it climbs out.
+
+    Earlier version note: a prior implementation recomputed the whole grid
+    from the *rolling* high/low and snapped the position directly to
+    "wherever price sits in that range" on every single bar. That let the
+    backtest capture the full round-trip of every tiny price wiggle with
+    perfect timing every bar, compounding into absurd (billions-of-percent)
+    backtested returns that no real order-fill process could ever achieve.
+    This version only trades a level on an actual crossing event, and holds
+    a level between crossings — the grid is a real, temporarily-fixed
+    ladder, not an oracle repriced every bar.
     """
 
     def __post_init__(self):
         self.name = "grid_trading"
         self.param_space = {
-            "range_window": (48, 480),   # bars used to define the rolling grid range
+            "range_window": (48, 480),   # bars used to define each grid ladder
             "n_levels": (4, 20),
         }
 
     def generate_positions(self, df: pd.DataFrame, params: dict) -> pd.Series:
         range_window = int(params["range_window"])
         n_levels = max(2, int(params["n_levels"]))
+        recalc_every = max(1, range_window // 4)
 
         close = df["close"].to_numpy()
-        roll_low = df["close"].rolling(range_window, min_periods=range_window).min().to_numpy()
-        roll_high = df["close"].rolling(range_window, min_periods=range_window).max().to_numpy()
-
         n = len(close)
         position = np.zeros(n)
-        held_levels = 0  # how many grid slices currently held, out of n_levels
+
+        grid_low = grid_high = None
+        levels_bought = np.zeros(n_levels, dtype=bool)
+        next_recalc_at = range_window  # first bar with a full range_window of history
 
         for i in range(n):
-            if i == 0 or np.isnan(roll_low[i]) or np.isnan(roll_high[i]):
+            if i >= next_recalc_at:
+                window = close[max(0, i - range_window):i]
+                grid_low, grid_high = float(window.min()), float(window.max())
+                next_recalc_at = i + recalc_every
+
+            if grid_low is None or grid_high <= grid_low:
                 position[i] = position[i - 1] if i > 0 else 0.0
                 continue
-            span = roll_high[i] - roll_low[i]
-            if span <= 0:
-                position[i] = position[i - 1]
-                continue
-            # Which grid line (0..n_levels) is price at right now?
-            level = int(np.clip((roll_high[i] - close[i]) / span * n_levels, 0, n_levels))
-            held_levels = level  # snap directly to the target level (buy dips, sell rallies)
-            position[i] = held_levels / n_levels
+
+            price = close[i]
+            step = (grid_high - grid_low) / n_levels
+            for lvl in range(n_levels):
+                level_price = grid_high - step * (lvl + 1)  # levels 0..n_levels-1, top to bottom
+                if not levels_bought[lvl] and price <= level_price:
+                    levels_bought[lvl] = True
+                elif levels_bought[lvl] and price > level_price + step:
+                    levels_bought[lvl] = False  # take profit one grid step above where it was bought
+
+            position[i] = levels_bought.sum() / n_levels
 
         return clip_position(pd.Series(position, index=df.index))
 
