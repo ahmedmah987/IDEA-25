@@ -100,6 +100,31 @@ def fetch_klines(
     return df[["open", "high", "low", "close", "volume", "quote_volume", "n_trades"]]
 
 
+def fetch_latest_klines(
+    symbol: str,
+    interval: str = "1h",
+    limit: int = 500,
+    base_url: str = DEFAULT_BASE_URL,
+) -> pd.DataFrame:
+    """Single-request fetch of the most recent `limit` candles (max 1000),
+    including `close_time` so callers can tell which candles are fully
+    closed. Used by the paper-trading engine, which only needs a rolling
+    warmup window on every tick, not full history — unlike `fetch_klines`,
+    this never paginates.
+    """
+    limit = min(limit, 1000)
+    batch = _get(f"{base_url}/api/v3/klines", params={"symbol": symbol, "interval": interval, "limit": limit})
+    df = pd.DataFrame(batch, columns=KLINE_COLUMNS)
+    if df.empty:
+        return df
+    df["open_time"] = pd.to_datetime(df["open_time"], unit="ms", utc=True)
+    df["close_time"] = pd.to_datetime(df["close_time"], unit="ms", utc=True)
+    df[_NUMERIC_COLUMNS] = df[_NUMERIC_COLUMNS].astype(float)
+    df["n_trades"] = df["n_trades"].astype(int)
+    df = df.set_index("open_time").sort_index()
+    return df[["open", "high", "low", "close", "volume", "quote_volume", "n_trades", "close_time"]]
+
+
 def load_or_fetch(
     symbol: str,
     interval: str = "1h",
