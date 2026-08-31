@@ -115,13 +115,20 @@ def load_or_fetch(
     cache_dir.mkdir(parents=True, exist_ok=True)
     cache_path = cache_dir / f"{symbol}_{interval}.parquet"
 
-    if cache_path.exists() and not force_refresh:
-        df = pd.read_parquet(cache_path)
-        if not df.empty:
-            return df
-
     end = pd.Timestamp.now(tz="UTC")
     start = end - pd.Timedelta(days=lookback_days)
+
+    if cache_path.exists() and not force_refresh:
+        df = pd.read_parquet(cache_path)
+        # Only reuse the cache if it actually covers the requested lookback
+        # window and isn't stale — otherwise a cache built for a shorter
+        # window (or an old run) would silently get reused for a longer one,
+        # producing results for a smaller/older sample than requested.
+        one_bar = pd.Timedelta(interval)
+        covers_lookback = not df.empty and df.index.min() <= start + pd.Timedelta(days=1)
+        is_fresh = not df.empty and df.index.max() >= end - 2 * one_bar - pd.Timedelta(hours=6)
+        if covers_lookback and is_fresh:
+            return df
     df = fetch_klines(
         symbol,
         interval=interval,
